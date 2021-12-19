@@ -2,6 +2,8 @@ package com.example.cameraxsample
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -10,6 +12,11 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cameraxsample.camera2.Camera2Activity
 import kotlinx.android.synthetic.main.activity_main.*
+
+/**
+ * Entrance for features(Cameras2 API and CamerasX API)
+ */
+typealias OnItemClick = (MainActivity.EntranceData) -> Unit
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,28 +29,29 @@ class MainActivity : AppCompatActivity() {
             this.startActivity(intent)
         }
         rl_camera_entrance.adapter = adapter
-
     }
 
     private fun configEntrances(): MutableList<EntranceData> = arrayListOf(
-        EntranceData(CameraXActivity::class.java, "CameraX API"),
-        EntranceData(Camera2Activity::class.java, "Camera2 API")
+        EntranceData(Camera2Activity::class.java, "Camera2 API"),
+        EntranceData(CameraXActivity::class.java, "CameraX API")
     )
 
-    private data class EntranceData(val clazz: Class<*>, val name: String)
+    data class EntranceData(val clazz: Class<*>,  // Intent have to input a java class,  so there Class as its parameters rather then KClass.
+                                    val name: String)
 
     private class EntranceRecycleViewAdapter(
         private val entranceList: MutableList<EntranceData>,
-        private val onClick: (EntranceData) -> Unit
+        private val onClick: OnItemClick
     ) :
         RecyclerView.Adapter<EntranceRecycleViewAdapter.EntranceRLViewHolder>() {
 
-        class EntranceRLViewHolder(itemView: View, onClick: (EntranceData) -> Unit) :
+        class EntranceRLViewHolder(itemView: View, onClick: OnItemClick) :
             RecyclerView.ViewHolder(itemView) {
             val demoName: TextView = itemView.findViewById(R.id.tv_use_case_name)
             var currentEntranceData: EntranceData? = null
 
-            init { // when does init block code can be executed?
+            init { // when does init block code can be executed?  init block have a higher priority than constructor.
+                Log.d(TAG, "init called")
                 itemView.setOnClickListener {
                     currentEntranceData?.let {
                         onClick(it)
@@ -51,6 +59,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
+            constructor(itemView: View, onClick: OnItemClick, name:String): this(itemView, onClick){
+                Log.d(
+                    TAG,
+                    "secondary constructor() called with: itemView = $itemView, onClick = $onClick, name = $name"
+                )
+            }
             fun bind(entranceData: EntranceData) {
                 this.currentEntranceData = entranceData
                 demoName.text = entranceData.name
@@ -59,11 +73,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EntranceRLViewHolder {
-            return EntranceRLViewHolder(parent, onClick)
+            //create view holder to control view
+            val contentView = LayoutInflater.from(parent.context).inflate(R.layout.entrance_itemview, parent, false)
+            return EntranceRLViewHolder(contentView, onClick,"name")
         }
 
         override fun onBindViewHolder(holder: EntranceRLViewHolder, position: Int) {
-
+            //input data to view holder as model
+            holder.bind(entranceList[position])
         }
 
         override fun getItemCount(): Int {

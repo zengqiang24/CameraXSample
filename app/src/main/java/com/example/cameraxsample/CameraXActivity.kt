@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.camera2.internal.Camera2CameraInfoImpl
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
@@ -19,6 +20,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.impl.CameraInfoInternal
+
+
 /** Helper type alias used for analysis use case callbacks */
 typealias LumaListener = (luma: Double) -> Unit
 
@@ -78,6 +83,7 @@ class CameraXActivity : AppCompatActivity() {
             })
     }
 
+    @SuppressLint("RestrictedApi", "UnsafeOptInUsageError")
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
@@ -103,9 +109,25 @@ class CameraXActivity : AppCompatActivity() {
                     })
                 }
             // Select back camera as a default
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-            try {
+            //    Camera@160b454[id=11]                        UNKNOWN
+            //    Camera@3e7d742[id=10]                        UNKNOWN
+            //    Camera@aa70e3e[id=12]                        UNKNOWN
+            //    Camera@25ee592[id=8]                         OPENING
+            //    Camera@22ebe30[id=2]                         UNKNOWN
+            //    Camera@47b6865[id=3]                         UNKNOWN
+            //    Camera@7e6ee78[id=9]
+//            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            val cameraSelector = CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK).addCameraFilter(
+                    {
+                        it.filter {
+                            val c  = it as Camera2CameraInfoImpl
+                             val isFilter = (c.cameraId ==  "12")
+                             isFilter
+                        }
+                    }
+                ).build()
+             try {
                 // Unbind use cases before rebinding
                 cameraProvider.unbindAll()
 
