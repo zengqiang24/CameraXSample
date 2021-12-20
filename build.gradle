@@ -6,7 +6,7 @@ buildscript {
         accompanist_version = '0.21.4-beta'
 
         //camerax
-        camerax_version = "1.0.1"
+        camerax_version = "1.1.0-alpha12"
     }
     repositories {
         google()

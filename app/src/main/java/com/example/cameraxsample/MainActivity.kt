@@ -32,7 +32,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun configEntrances(): MutableList<EntranceData> = arrayListOf(
-        EntranceData(Camera2Activity::class.java, "Camera2 API"),
+//        EntranceData(Camera2Activity::class.java, "Camera2 API"),
         EntranceData(CameraXActivity::class.java, "CameraX API")
     )
 

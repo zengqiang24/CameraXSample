@@ -4,15 +4,20 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.widget.RadioButton
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.camera2.internal.Camera2CameraInfoImpl
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.*
+import androidx.camera.core.ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.example.FRONT_CAMERA_ID
 import kotlinx.android.synthetic.main.camerax_activity_main.*
 import java.io.File
 import java.nio.ByteBuffer
@@ -20,8 +25,6 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.impl.CameraInfoInternal
 
 
 /** Helper type alias used for analysis use case callbacks */
@@ -42,15 +45,33 @@ class CameraXActivity : AppCompatActivity() {
             startCamera()
         } else {
             ActivityCompat.requestPermissions(
-                this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
+                this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
+            )
         }
 
         // Set up the listener for take photo button
         camera_capture_button.setOnClickListener { takePhoto() }
 
+        rg_cameras.setOnCheckedChangeListener { group, checkId ->
+            Log.d(TAG, "user tap camera id = $checkId")
+
+        }
+        Log.d(TAG, "onCreate() called with: rg_cameras = ${rg_cameras.childCount}")
         outputDirectory = getOutputDirectory()
 
+        //use for image Analyzer
         cameraExecutor = Executors.newSingleThreadExecutor()
+    }
+
+    private fun initCamerasSwitchMenu(cameraIdList: List<String>, selectedCameraId: Int) {
+        for (id in cameraIdList) {
+            val rb = RadioButton(this)
+            rb.text = "$id"
+            rb.setTextColor(resources.getColor(R.color.design_default_color_primary))
+            rb.id = id.toInt()
+            rg_cameras.addView(rb)
+        }
+        rg_cameras.check(selectedCameraId)
     }
 
     private fun takePhoto() {
@@ -60,8 +81,10 @@ class CameraXActivity : AppCompatActivity() {
         // Create time-stamped output file to hold the image
         val photoFile = File(
             outputDirectory,
-            SimpleDateFormat(FILENAME_FORMAT, Locale.US
-            ).format(System.currentTimeMillis()) + ".jpg")
+            SimpleDateFormat(
+                FILENAME_FORMAT, Locale.US
+            ).format(System.currentTimeMillis()) + ".jpg"
+        )
 
         // Create output options object which contains file + metadata
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
@@ -69,7 +92,9 @@ class CameraXActivity : AppCompatActivity() {
         // Set up image capture listener, which is triggered after photo has
         // been taken
         imageCapture.takePicture(
-            outputOptions, ContextCompat.getMainExecutor(this), object : ImageCapture.OnImageSavedCallback {
+            outputOptions,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
                 override fun onError(exc: ImageCaptureException) {
                     Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
                 }
@@ -85,12 +110,46 @@ class CameraXActivity : AppCompatActivity() {
 
     @SuppressLint("RestrictedApi", "UnsafeOptInUsageError")
     private fun startCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        @RequiresApi(Build.VERSION_CODES.Q)
+        fun selectExternalOrBestCamera(
+            provider: ProcessCameraProvider,
+            selectedCameraId: String
+        ): CameraSelector {
+            Log.d(TAG, "supported cameras size = ${provider.availableCameraInfos.size}")
+            val cam2Infos = provider.availableCameraInfos.map {
+                val camera2Info = Camera2CameraInfo.from(it)
+                Log.d(TAG, "cameraId: ${camera2Info.cameraId}: ")
+                for (value in camera2Info.cameraCharacteristicsMap.values) {
+                    for (k in value.keys) {
+                        Log.d(TAG, "key = $k value= ${value.get(k).toString()}")
+                    }
+                }
+            }
+//                .sortedByDescending {
+//                // HARDWARE_LEVEL is Int type, with the order of:
+//                // LEGACY < LIMITED < FULL < LEVEL_3 < EXTERNAL
+//                it.getCameraCharacteristic(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)
+//            }
 
+            return when {
+                cam2Infos.isNotEmpty() -> {
+                    CameraSelector.Builder()
+                        .addCameraFilter {
+                            it.filter { camInfo ->
+                                // cam2Infos[0] is either EXTERNAL or best built-in camera
+                                val thisCamId = Camera2CameraInfo.from(camInfo).cameraId
+                                thisCamId == selectedCameraId
+                            }
+                        }.build()
+                }
+                else -> CameraSelector.DEFAULT_BACK_CAMERA
+            }
+        }
+
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener(Runnable {
             // Used to bind the lifecycle of cameras to the lifecycle owner
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-
             // Preview
             val preview = Preview.Builder()
                 .build()
@@ -101,10 +160,13 @@ class CameraXActivity : AppCompatActivity() {
             imageCapture = ImageCapture.Builder()
                 .build()
 
+            //Add image reader target
             val imageAnalyzer = ImageAnalysis.Builder()
+//                .setOutputImageFormat(OUTPUT_IMAGE_FORMAT_YUV_420_888)
+                .setOutputImageFormat(OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build()
                 .also {
-                    it.setAnalyzer(cameraExecutor, LuminosityAnalyzer{ luma ->
+                    it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->
                         Log.d(TAG, "Average luminosity: $luma")
                     })
                 }
@@ -117,25 +179,40 @@ class CameraXActivity : AppCompatActivity() {
             //    Camera@47b6865[id=3]                         UNKNOWN
             //    Camera@7e6ee78[id=9]
 //            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-            val cameraSelector = CameraSelector.Builder()
-                .requireLensFacing(CameraSelector.LENS_FACING_BACK).addCameraFilter(
-                    {
-                        it.filter {
-                            val c  = it as Camera2CameraInfoImpl
-                             val isFilter = (c.cameraId ==  "12")
-                             isFilter
-                        }
-                    }
-                ).build()
-             try {
+//            val cameraSelector = CameraSelector.Builder()
+//                .requireLensFacing(CameraSelector.LENS_FACING_BACK).addCameraFilter {
+//                    it.filter { cameraInfo ->
+//                        val c = cameraInfo as Camera2CameraInfoImpl
+//                        (c.cameraId == "12")
+//                    }
+//                }.build()
+
+            val cameInfoList = cameraProvider.availableCameraInfos.map { cameraInfo ->
+                Camera2CameraInfo.from(cameraInfo)
+            }
+            initCamerasSwitchMenu(cameInfoList.map { it.cameraId }, FRONT_CAMERA_ID.toInt())
+            rg_cameras.setOnCheckedChangeListener { _, id ->
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    this,
+                    selectExternalOrBestCamera(cameraProvider, id.toString()),
+                    preview,
+                    imageCapture,
+                    imageAnalyzer
+                )
+            }
+
+            val cameraSelector =
+                selectExternalOrBestCamera(cameraProvider, FRONT_CAMERA_ID)
+            try {
                 // Unbind use cases before rebinding
                 cameraProvider.unbindAll()
 
                 // Bind use cases to camera
                 cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageCapture, imageAnalyzer)
-
-            } catch(exc: Exception) {
+                    this, cameraSelector, preview, imageCapture, imageAnalyzer
+                )
+            } catch (exc: Exception) {
                 Log.e(TAG, "Use case binding failed", exc)
             }
 
@@ -144,20 +221,24 @@ class CameraXActivity : AppCompatActivity() {
 
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(
-            baseContext, it) == PackageManager.PERMISSION_GRANTED
+            baseContext, it
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     @SuppressLint("MissingSuperCall")
     override fun onRequestPermissionsResult(
         requestCode: Int, permissions: Array<String>, grantResults:
-        IntArray) {
+        IntArray
+    ) {
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
                 startCamera()
             } else {
-                Toast.makeText(this,
+                Toast.makeText(
+                    this,
                     "Permissions not granted by the user.",
-                    Toast.LENGTH_SHORT).show()
+                    Toast.LENGTH_SHORT
+                ).show()
                 finish()
             }
         }
@@ -166,7 +247,8 @@ class CameraXActivity : AppCompatActivity() {
 
     private fun getOutputDirectory(): File {
         val mediaDir = externalMediaDirs.firstOrNull()?.let {
-            File(it, resources.getString(R.string.app_name)).apply { mkdirs() } }
+            File(it, resources.getString(R.string.app_name)).apply { mkdirs() }
+        }
         return if (mediaDir != null && mediaDir.exists())
             mediaDir else filesDir
     }
@@ -182,6 +264,7 @@ class CameraXActivity : AppCompatActivity() {
         private const val REQUEST_CODE_PERMISSIONS = 10
         private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
     }
+
     private class LuminosityAnalyzer(private val listener: LumaListener) : ImageAnalysis.Analyzer {
 
         private fun ByteBuffer.toByteArray(): ByteArray {
@@ -191,8 +274,9 @@ class CameraXActivity : AppCompatActivity() {
             return data // Return the byte array
         }
 
+        //process in thread pool
         override fun analyze(image: ImageProxy) {
-
+            Log.d(TAG, "analyze() called with: image = ${image.format}")
             val buffer = image.planes[0].buffer
             val data = buffer.toByteArray()
             val pixels = data.map { it.toInt() and 0xFF }
