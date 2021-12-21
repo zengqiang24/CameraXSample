@@ -33,7 +33,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun configEntrances(): MutableList<EntranceData> = arrayListOf(
         EntranceData(CameraXActivity::class.java, "CameraX API"),
-        EntranceData(Camera2Activity::class.java, "Camera2 API")
+        EntranceData(Camera2Activity::class.java, "Camera2 API"),
+        EntranceData(GLSurfaceViewActivity::class.java, "Opengl ES")
     )
 
     data class EntranceData(val clazz: Class<*>,  // Intent have to input a java class,  so there Class as its parameters rather then KClass.
