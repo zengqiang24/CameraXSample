@@ -1,2 +1,2 @@
-# CameraXSample
-Determinate how to use cameraX with kotlin.
+# CameraSample
+Determinate how to use camera2 and cameraX with kotlin.
