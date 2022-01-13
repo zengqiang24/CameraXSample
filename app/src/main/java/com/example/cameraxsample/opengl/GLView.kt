@@ -1,4 +1,4 @@
-package com.example.cameraxsample
+package com.example.cameraxsample.opengl
 
 import android.content.Context
 import android.opengl.GLES20

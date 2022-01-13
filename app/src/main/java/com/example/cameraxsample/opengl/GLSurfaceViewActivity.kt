@@ -1,4 +1,4 @@
-package com.example.cameraxsample
+package com.example.cameraxsample.opengl
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity

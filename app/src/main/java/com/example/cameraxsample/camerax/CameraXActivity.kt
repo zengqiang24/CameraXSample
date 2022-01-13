@@ -1,4 +1,4 @@
-package com.example.cameraxsample
+package com.example.cameraxsample.camerax
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -7,17 +7,20 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.util.Size
 import android.widget.RadioButton
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.*
-import androidx.camera.core.ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888
+import androidx.camera.core.ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.FRONT_CAMERA_ID
+import com.example.cameraxsample.common.Camera
+import com.example.cameraxsample.common.getOutputDirectory
+import com.example.cameraxsample.jni.GLJNI
 import kotlinx.android.synthetic.main.camerax_activity_main.*
 import java.io.File
 import java.nio.ByteBuffer
@@ -38,7 +41,7 @@ class CameraXActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.camerax_activity_main)
+        setContentView(com.example.cameraxsample.R.layout.camerax_activity_main)
 
         // Request camera permissions
         if (allPermissionsGranted()) {
@@ -57,21 +60,30 @@ class CameraXActivity : AppCompatActivity() {
 
         }
         Log.d(TAG, "onCreate() called with: rg_cameras = ${rg_cameras.childCount}")
-        outputDirectory = getOutputDirectory()
+        outputDirectory = getOutputDirectory(
+            this.applicationContext,
+            resources.getString(com.example.cameraxsample.R.string.app_name)
+        )
 
         //use for image Analyzer
         cameraExecutor = Executors.newSingleThreadExecutor()
+        Log.d("qiang", "${GLJNI.helloJNI()}")
     }
 
-    private fun initCamerasSwitchMenu(cameraIdList: List<String>, selectedCameraId: Int) {
+    private fun initCamerasSwitchMenu(cameraIdList: List<String>, selectedCameraId: String) {
         for (id in cameraIdList) {
             val rb = RadioButton(this)
             rb.text = "$id"
-            rb.setTextColor(resources.getColor(R.color.design_default_color_primary))
+            rb.setTextColor(resources.getColor(com.example.cameraxsample.R.color.design_default_color_primary))
             rb.id = id.toInt()
             rg_cameras.addView(rb)
         }
-        rg_cameras.check(selectedCameraId)
+        rg_cameras.check((selectedCameraId.toInt()))
+    }
+
+    //switch camera than updateCameraResolutionList
+    private fun configCamerasResolution(selectedCameraId: Int) {
+
     }
 
     private fun takePhoto() {
@@ -118,10 +130,18 @@ class CameraXActivity : AppCompatActivity() {
             Log.d(TAG, "supported cameras size = ${provider.availableCameraInfos.size}")
             val cam2Infos = provider.availableCameraInfos.map {
                 val camera2Info = Camera2CameraInfo.from(it)
-                Log.d(TAG, "cameraId: ${camera2Info.cameraId}: ")
                 for (value in camera2Info.cameraCharacteristicsMap.values) {
                     for (k in value.keys) {
-                        Log.d(TAG, "key = $k value= ${value.get(k).toString()}")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            Log.d(
+                                TAG,
+                                "key = $k value= ${
+                                    value.get(k).toString()
+                                }                          value.physicalCameraIds= ${
+                                    value.physicalCameraIds
+                                }"
+                            )
+                        }
                     }
                 }
             }
@@ -158,12 +178,14 @@ class CameraXActivity : AppCompatActivity() {
                 }
 
             imageCapture = ImageCapture.Builder()
+                .setTargetResolution(Size(2560, 1440))
                 .build()
 
             //Add image reader target
             val imageAnalyzer = ImageAnalysis.Builder()
 //                .setOutputImageFormat(OUTPUT_IMAGE_FORMAT_YUV_420_888)
-                .setOutputImageFormat(OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                .setTargetResolution(Size(2560, 1440))
+                .setOutputImageFormat(OUTPUT_IMAGE_FORMAT_YUV_420_888)
                 .build()
                 .also {
                     it.setAnalyzer(cameraExecutor, LuminosityAnalyzer { luma ->
@@ -190,7 +212,7 @@ class CameraXActivity : AppCompatActivity() {
             val cameInfoList = cameraProvider.availableCameraInfos.map { cameraInfo ->
                 Camera2CameraInfo.from(cameraInfo)
             }
-            initCamerasSwitchMenu(cameInfoList.map { it.cameraId }, FRONT_CAMERA_ID.toInt())
+            initCamerasSwitchMenu(cameInfoList.map { it.cameraId }, Camera.FRONT_CAMERA.ID)
             rg_cameras.setOnCheckedChangeListener { _, id ->
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(
@@ -203,7 +225,7 @@ class CameraXActivity : AppCompatActivity() {
             }
 
             val cameraSelector =
-                selectExternalOrBestCamera(cameraProvider, FRONT_CAMERA_ID)
+                selectExternalOrBestCamera(cameraProvider, Camera.FRONT_CAMERA.ID)
             try {
                 // Unbind use cases before rebinding
                 cameraProvider.unbindAll()
@@ -244,14 +266,13 @@ class CameraXActivity : AppCompatActivity() {
         }
     }
 
-
-    private fun getOutputDirectory(): File {
-        val mediaDir = externalMediaDirs.firstOrNull()?.let {
-            File(it, resources.getString(R.string.app_name)).apply { mkdirs() }
-        }
-        return if (mediaDir != null && mediaDir.exists())
-            mediaDir else filesDir
-    }
+//    private fun getOutputDirectory(): File {
+//        val mediaDir = externalMediaDirs.firstOrNull()?.let {
+//            File(it, resources.getString(com.example.cameraxsample.R.string.app_name)).apply { mkdirs() }
+//        }
+//        return if (mediaDir != null && mediaDir.exists())
+//            mediaDir else filesDir
+//    }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -276,7 +297,7 @@ class CameraXActivity : AppCompatActivity() {
 
         //process in thread pool
         override fun analyze(image: ImageProxy) {
-            Log.d(TAG, "analyze() called with: image = ${image.format}")
+            Log.d(TAG, "analyze() called with: image = ${image.width} rect = ${image.cropRect}")
             val buffer = image.planes[0].buffer
             val data = buffer.toByteArray()
             val pixels = data.map { it.toInt() and 0xFF }

@@ -11,12 +11,15 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.cameraxsample.camera2.Camera2Activity
+import com.example.cameraxsample.camerax.CameraXActivity
+import com.example.cameraxsample.opengl.GLSurfaceViewActivity
 import kotlinx.android.synthetic.main.activity_main.*
 
 /**
  * Entrance for features(Cameras2 API and CamerasX API)
  */
 typealias OnItemClick = (MainActivity.EntranceData) -> Unit
+
 class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,12 +36,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun configEntrances(): MutableList<EntranceData> = arrayListOf(
         EntranceData(CameraXActivity::class.java, "CameraX API"),
+//        EntranceData(ShowAllCameraActivity::class.java, "All cameras"),
         EntranceData(Camera2Activity::class.java, "Camera2 API"),
-        EntranceData(GLSurfaceViewActivity::class.java, "Opengl ES")
+//        EntranceData(GLSurfaceViewActivity::class.java, "Opengl ES"),
+//        EntranceData(TestAppWidgetActivity::class.java, "TestAppWidget")
     )
 
-    data class EntranceData(val clazz: Class<*>,  // Intent have to input a java class,  so there Class as its parameters rather then KClass.
-                                    val name: String)
+    data class EntranceData(
+        val clazz: Class<*>,  // Intent have to input a java class,  so there Class as its parameters rather then KClass.
+        val name: String
+    )
 
     private class EntranceRecycleViewAdapter(
         private val entranceList: MutableList<EntranceData>,
@@ -60,12 +67,16 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            constructor(itemView: View, onClick: OnItemClick, name:String): this(itemView, onClick){
+            constructor(itemView: View, onClick: OnItemClick, name: String) : this(
+                itemView,
+                onClick
+            ) {
                 Log.d(
                     TAG,
                     "secondary constructor() called with: itemView = $itemView, onClick = $onClick, name = $name"
                 )
             }
+
             fun bind(entranceData: EntranceData) {
                 this.currentEntranceData = entranceData
                 demoName.text = entranceData.name
@@ -75,8 +86,9 @@ class MainActivity : AppCompatActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): EntranceRLViewHolder {
             //create view holder to control view
-            val contentView = LayoutInflater.from(parent.context).inflate(R.layout.entrance_itemview, parent, false)
-            return EntranceRLViewHolder(contentView, onClick,"name")
+            val contentView = LayoutInflater.from(parent.context)
+                .inflate(R.layout.entrance_itemview, parent, false)
+            return EntranceRLViewHolder(contentView, onClick, "name")
         }
 
         override fun onBindViewHolder(holder: EntranceRLViewHolder, position: Int) {
