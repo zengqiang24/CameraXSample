@@ -6,7 +6,7 @@ import java.util.concurrent.Executor
 
 data class AVMPreviewConfig(
     val cameraId: String,
-    val surface: Surface,
+    val surfaces: MutableList<Surface>,
     val executor: Executor = ExecutorsHelper.SINGLE_THREAD_POOL,
     var outputSize: Array<Int> ?= null
 )

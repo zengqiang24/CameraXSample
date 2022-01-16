@@ -5,8 +5,6 @@ import android.util.Size
 import androidx.lifecycle.ViewModel
 import com.example.cameraxsample.common.Camera
 import com.example.cameraxsample.common.AVMPreviewConfig
-import com.example.cameraxsample.common.OnCaptureResultListener
-import java.lang.Exception
 
 /**
  * 职责：
@@ -43,16 +41,13 @@ class VCameraViewModel(private val vCameraManager: VCameraManager) : ViewModel()
      * 拍照
      */
     fun capture() {
-        vCameraManager.capture(object : OnCaptureResultListener {
-            override fun onSuccess(filePath: String) {
-                Log.d(TAG, "onSuccess() called with: filePath = $filePath")
-
-            }
-
-            override fun onFail(e: Exception) {
-                Log.d(TAG, "onFail() called with: e = $e")
-            }
-        })
+        vCameraManager.capture(
+            onSuccess = {
+                Log.d(TAG, "capture() called with: filePath = $it")
+            },
+            onFail = {
+                Log.e(TAG, "capture failed: ", it)
+            })
     }
 
 

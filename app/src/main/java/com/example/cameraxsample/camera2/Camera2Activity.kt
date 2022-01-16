@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.annotation.RequiresApi
@@ -37,11 +38,11 @@ class Camera2Activity : AppCompatActivity() {
             @SuppressLint("MissingPermission")
             override fun surfaceCreated(holder: SurfaceHolder) {
                 val previewSurface = surfaceView.holder.surface
-//                val targets = listOf(previewSurface, imReaderSurface)
+                val targets = mutableListOf<Surface>(previewSurface)
                 with(
                     AVMPreviewConfig(
                         cameraId = viewModel.selectedCameraId,
-                        surface = previewSurface,
+                        surfaces = targets,
                     )
                 ) {
                     viewModel.preview(this)
@@ -67,6 +68,12 @@ class Camera2Activity : AppCompatActivity() {
         }
     }
 
+    class CaptureHandlerThread(name: String) : HandlerThread(name) {
+        override fun run() {
+            super.run()
+            Log.d(TAG, "CaptureHandlerThread running")
+        }
+    }
     companion object {
         private const val TAG = "Camera2Activity"
     }
