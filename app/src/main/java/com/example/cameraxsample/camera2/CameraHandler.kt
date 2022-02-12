@@ -75,6 +75,9 @@ class CameraHandler(
 //        )
     }
 
+    /**
+     * save  frame will block cpu
+     */
     private fun saveFrame(image: Image) {
         val timestamp: Long = image.getTimestamp()
 
