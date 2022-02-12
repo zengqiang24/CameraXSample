@@ -1,16 +1,22 @@
 package com.example.cameraxsample.common
 
-import android.content.Context
-import java.io.File
-
 //CAMERA Devices ID depends on specific head unit.
-enum class Camera(val ID: String){
-    LEFT_CAMERA("8"), RIGHT_CAMERA("9"), FRONT_CAMERA("10"), BACK_CAMERA_("11");
+enum class Camera(val ID: String) {
+    LEFT_CAMERA("8"), RIGHT_CAMERA("9"), FRONT_CAMERA("10"), BACK_CAMERA("11");
 
     override fun toString(): String {
         return name
     }
+}
 
+fun getCameraName(id: String): String {
+    return when (id) {
+        "8" -> Camera.LEFT_CAMERA.toString()
+        "9" -> Camera.RIGHT_CAMERA.toString()
+        "10" -> Camera.FRONT_CAMERA.toString()
+        "11" -> Camera.BACK_CAMERA.toString()
+        else -> "unknown"
+    }
 }
 
 fun main() {
@@ -24,13 +30,3 @@ fun main() {
 //Camera@2df2fb7[id=8]                         UNKNOWN
 //Camera@79f2384[id=12]                        UNKNOWN
 
-/**
- * get image save path
- */
-fun getOutputDirectory(context: Context, fileName: String): File {
-    val mediaDir = context.externalMediaDirs.firstOrNull()?.let {
-        File(it, fileName).apply { mkdirs() }
-    }
-    return if (mediaDir != null && mediaDir.exists())
-        mediaDir else context.filesDir
-}

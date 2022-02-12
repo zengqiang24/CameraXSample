@@ -18,8 +18,8 @@ import androidx.camera.core.ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.example.cameraxsample.camera2.getOutputDirectory
 import com.example.cameraxsample.common.Camera
-import com.example.cameraxsample.common.getOutputDirectory
 import com.example.cameraxsample.jni.GLJNI
 import kotlinx.android.synthetic.main.camerax_activity_main.*
 import java.io.File
@@ -281,7 +281,7 @@ class CameraXActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "CameraXBasic"
-        private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
+        const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
         private const val REQUEST_CODE_PERMISSIONS = 10
         private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
     }

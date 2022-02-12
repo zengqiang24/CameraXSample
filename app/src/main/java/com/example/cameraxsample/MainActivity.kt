@@ -35,7 +35,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun configEntrances(): MutableList<EntranceData> = arrayListOf(
-        EntranceData(CameraXActivity::class.java, "CameraX API"),
+//        EntranceData(CameraXActivity::class.java, "CameraX API"),
 //        EntranceData(ShowAllCameraActivity::class.java, "All cameras"),
         EntranceData(Camera2Activity::class.java, "Camera2 API"),
 //        EntranceData(GLSurfaceViewActivity::class.java, "Opengl ES"),

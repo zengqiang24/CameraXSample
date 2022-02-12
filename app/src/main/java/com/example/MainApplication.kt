@@ -6,29 +6,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.camera2.Camera2Config
 import androidx.camera.core.CameraXConfig
 import com.example.cameraxsample.camera2.VCameraRepository
-import com.example.cameraxsample.camera2.VCameraManager
+import com.example.cameraxsample.camera2.CameraHandler
+import com.example.cameraxsample.common.Camera
 import kotlinx.coroutines.Dispatchers
 
 class MainApplication : Application(), CameraXConfig.Provider {
-    val vCameraManager: VCameraManager by lazy {
-        initVCamera()
-    }
-
     override fun onCreate() {
         super.onCreate()
-    }
-
-    /**
-     * 初始化相机SDK
-     */
-    private fun initVCamera(): VCameraManager {
-        val cameraSystemManager =
-            this.getSystemService(AppCompatActivity.CAMERA_SERVICE) as CameraManager
-        return VCameraManager(
-            this.applicationContext,
-            cameraSystemManager,
-            VCameraRepository(cameraSystemManager, Dispatchers.IO)
-        )
     }
 
     override fun getCameraXConfig(): CameraXConfig {

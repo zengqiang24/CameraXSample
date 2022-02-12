@@ -5,7 +5,6 @@ import java.lang.Exception
 import java.util.concurrent.Executor
 
 data class AVMPreviewConfig(
-    val cameraId: String,
     val surfaces: MutableList<Surface>,
     val executor: Executor = ExecutorsHelper.SINGLE_THREAD_POOL,
     var outputSize: Array<Int> ?= null

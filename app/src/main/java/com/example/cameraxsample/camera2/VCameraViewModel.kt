@@ -11,7 +11,7 @@ import com.example.cameraxsample.common.AVMPreviewConfig
  * 1. 为UI层提供相机配置类的数据
  * 2. 处理来自UI层的事件； 拍照，预览
  */
-class VCameraViewModel(private val vCameraManager: VCameraManager) : ViewModel() {
+class VCameraViewModel(private val cameraHandler: CameraHandler) : ViewModel() {
 
 
     val defaultOutputSize: Array<Int> = arrayOf(1920, 1080)
@@ -41,7 +41,7 @@ class VCameraViewModel(private val vCameraManager: VCameraManager) : ViewModel()
      * 拍照
      */
     fun capture() {
-        vCameraManager.capture(
+        cameraHandler.capture(
             onSuccess = {
                 Log.d(TAG, "capture() called with: filePath = $it")
             },
@@ -56,7 +56,7 @@ class VCameraViewModel(private val vCameraManager: VCameraManager) : ViewModel()
      */
 
     fun preview(AVMPreviewParam: AVMPreviewConfig) {
-        vCameraManager.preview(AVMPreviewParam)
+        cameraHandler.preview(AVMPreviewParam)
     }
 
     companion object {
