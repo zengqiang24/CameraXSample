@@ -55,10 +55,20 @@ class VCameraViewModel(private val cameraHandler: CameraHandler) : ViewModel() {
      * 预览相机
      */
 
+    fun onResume() {
+        cameraHandler.onResume()
+    }
+
+    fun onPause() {
+        cameraHandler.onPause()
+    }
     fun preview(AVMPreviewParam: AVMPreviewConfig) {
         cameraHandler.preview(AVMPreviewParam)
     }
 
+    fun releaseCameras(){
+        cameraHandler.release()
+    }
     companion object {
         private const val TAG = "VCameraViewModel"
     }

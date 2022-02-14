@@ -10,13 +10,16 @@ import android.media.Image
 import android.util.Log
 import android.util.Size
 import com.example.cameraxsample.common.Camera
+import com.example.cameraxsample.common.ExecutorsHelper
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class VCameraRepository(
     private val defaultDispatcher: CoroutineDispatcher) {
+    @Volatile
+    var  isSavingPhoto : Boolean  = false
     private lateinit var cameraSystemManager : CameraManager
+    private val threadPool =  ExecutorsHelper.SINGLE_THREAD_POOL
     init {
 
     }
@@ -37,9 +40,14 @@ class VCameraRepository(
     }
 
    fun saveFrame(context: Context, cameraDeviceName:String, bitmap: Bitmap) {
-        saveBitmap(context, bitmap, cameraDeviceName)
-    }
-
+       threadPool.execute {
+           synchronized(VCameraRepository::class) {
+               isSavingPhoto = true
+               saveBitmap(context, bitmap, cameraDeviceName)
+               isSavingPhoto = false
+           }
+       }
+   }
 
     companion object {
         private const val TAG = "VCameraRepository"

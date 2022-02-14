@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.view.*
 import androidx.annotation.RequiresApi
 import androidx.fragment.app.Fragment
+import com.example.MainApplication
 import com.example.cameraxsample.common.AVMPreviewConfig
 import com.example.cameraxsample.databinding.CameraLayoutFragmentBinding
 
@@ -19,7 +20,6 @@ class PreviewFragment(private val cameraId: String) : Fragment() {
         this._context = context
     }
 
-
     companion object {
         fun newInstance(cameraId: String): Fragment {
             return PreviewFragment(cameraId)
@@ -31,9 +31,26 @@ class PreviewFragment(private val cameraId: String) : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        viewModel = VCameraViewModel(CameraFactoryImpl().createCamera(_context, cameraId))
+        val mainApplication = _context.applicationContext as MainApplication
+        viewModel = VCameraViewModel(
+            CameraFactoryImpl().createCamera(
+                _context,
+                cameraId,
+                mainApplication.getRespository()
+            )
+        )
         binding = CameraLayoutFragmentBinding.inflate(inflater, container, false)
         return binding.root
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel?.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        viewModel?.onPause()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -67,5 +84,10 @@ class PreviewFragment(private val cameraId: String) : Fragment() {
             }
 
         })
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        viewModel?.releaseCameras()
     }
 }

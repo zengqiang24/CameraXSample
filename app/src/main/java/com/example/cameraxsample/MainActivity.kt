@@ -37,7 +37,7 @@ class MainActivity : AppCompatActivity() {
     private fun configEntrances(): MutableList<EntranceData> = arrayListOf(
 //        EntranceData(CameraXActivity::class.java, "CameraX API"),
 //        EntranceData(ShowAllCameraActivity::class.java, "All cameras"),
-        EntranceData(Camera2Activity::class.java, "Camera2 API"),
+        EntranceData(Camera2Activity::class.java, "录制图像"),
 //        EntranceData(GLSurfaceViewActivity::class.java, "Opengl ES"),
 //        EntranceData(TestAppWidgetActivity::class.java, "TestAppWidget")
     )

@@ -16,16 +16,17 @@ import android.util.Log
 import android.util.Size
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import com.example.cameraxsample.common.AVMPreviewConfig
 import com.example.cameraxsample.common.ExecutorsHelper
 import com.example.cameraxsample.common.getCameraName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
+import java.nio.ReadOnlyBufferException
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.experimental.inv
+
 
 class CameraHandler(
     private val context: Context,
@@ -41,9 +42,9 @@ class CameraHandler(
     private var backgroundHandler: Handler? = null
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
     private var cameraSystemManager = context.getSystemService(AppCompatActivity.CAMERA_SERVICE) as CameraManager
-
+    private var cameraDevice:CameraDevice? = null
     init {
-        backgroundThread = BackgroundThread("11capture-thread $cameraId")
+        backgroundThread = BackgroundThread("capture-thread $cameraId")
         backgroundThread?.let {
             it.start()
             backgroundHandler = Handler(it.looper)
@@ -52,6 +53,7 @@ class CameraHandler(
 
     fun onResume() {
         if (backgroundThread == null) {
+            Log.d(TAG, "imageReader background thread start() called")
             backgroundThread?.let {
                 it.start()
                 backgroundHandler = Handler(it.looper)
@@ -60,75 +62,106 @@ class CameraHandler(
     }
 
     fun onPause() {
+        Log.d(TAG, "imageReader background thread quitSafely() called")
         backgroundThread?.quitSafely()
         backgroundThread = null
         backgroundHandler = null
     }
 
     init {
-//        imageReader.setOnImageAvailableListener(
-//            {
-//                Log.d(TAG, "in imageReader, thread name = ${Thread.currentThread().name}")
-////                val frame = it.acquireNextImage()
-////                saveFrame(frame)
-//            }, backgroundHandler
-//        )
+        imageReader.setOnImageAvailableListener(
+            {
+                Log.d(TAG, "in imageReader, thread name = ${Thread.currentThread().name}")
+                saveFrame(it.acquireNextImage())
+            }, backgroundHandler
+        )
     }
 
     /**
      * save  frame will block cpu
      */
     private fun saveFrame(image: Image) {
-        val timestamp: Long = image.getTimestamp()
-
-        // long timestampSinceBoot = SystemClock.elapsedRealtimeNanos();
-        // Log.d(TAG, "timestampSinceBoot : " + timestampSinceBoot);
-
-        // Collection of bytes of the image
-
-        // long timestampSinceBoot = SystemClock.elapsedRealtimeNanos();
-        // Log.d(TAG, "timestampSinceBoot : " + timestampSinceBoot);
-
-        // Collection of bytes of the image
-        val rez: ByteArray
-
-        // Convert to NV21 format
-        // https://github.com/bytedeco/javacv/issues/298#issuecomment-169100091
-
-        // Convert to NV21 format
-        // https://github.com/bytedeco/javacv/issues/298#issuecomment-169100091
-        val buffer0: ByteBuffer = image.getPlanes().get(0).getBuffer()
-        val buffer2: ByteBuffer = image.getPlanes().get(2).getBuffer()
-        val buffer0_size = buffer0.remaining()
-        val buffer2_size = buffer2.remaining()
-        rez = ByteArray(buffer0_size + buffer2_size)
-
-        // Load the final data var with the actual bytes
-
-        // Load the final data var with the actual bytes
-        buffer0[rez, 0, buffer0_size]
-        buffer2[rez, buffer0_size, buffer2_size]
-
-        // Byte output stream, so we can save the file
-
-        // Byte output stream, so we can save the file
-        val out = ByteArrayOutputStream()
-
-        // Create YUV image file
-
-        // Create YUV image file
-        val yuvImage = YuvImage(rez, ImageFormat.NV21, image.getWidth(), image.getHeight(), null)
-        yuvImage.compressToJpeg(Rect(0, 0, image.getWidth(), image.getHeight()), 90, out)
-        val imageBytes = out.toByteArray()
-
-        // Display for the end user
-        val bmp = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-        vCameraRepository.saveFrame(context, getCameraName(cameraId), bmp)
+        val savingPhoto = vCameraRepository.isSavingPhoto
+        if(savingPhoto) {
+            image.close()
+            Log.d(TAG, "正在保存图片，跳过此帧...")
+            return
+        }
+        val timestamp: Long = image.timestamp
+        val yuv420888tonv21 = YUV_420_888toNV21(image)
+        val bitmap = BitmapFactory.decodeByteArray(yuv420888tonv21, 0, yuv420888tonv21!!.size)
+        if(bitmap == null) {
+            Log.d(TAG, "saveFrame() called with: bitmap = $bitmap")
+            image.close()
+            return
+        }
+        vCameraRepository.saveFrame(context, getCameraName(cameraId), bitmap)
         image.close()
     }
 
+    private fun YUV_420_888toNV21(image: Image): ByteArray? {
+        val width = image.width
+        val height = image.height
+        val ySize = width * height
+        val uvSize = width * height / 4
+        val nv21 = ByteArray(ySize + uvSize * 2)
+        val yBuffer: ByteBuffer = image.planes[0].buffer // Y
+        val uBuffer: ByteBuffer = image.planes[1].buffer // U
+        val vBuffer: ByteBuffer = image.planes[2].buffer // V
+        var rowStride = image.planes[0].rowStride
+        assert(image.planes[0].pixelStride == 1)
+        var pos = 0
+        if (rowStride == width) { // likely
+            yBuffer.get(nv21, 0, ySize)
+            pos += ySize
+        } else {
+            var yBufferPos = -rowStride.toLong() // not an actual position
+            while (pos < ySize) {
+                yBufferPos += rowStride.toLong()
+                yBuffer.position(yBufferPos.toInt())
+                yBuffer.get(nv21, pos, width)
+                pos += width
+            }
+        }
+        rowStride = image.planes[2].rowStride
+        val pixelStride = image.planes[2].pixelStride
+        assert(rowStride == image.planes[1].rowStride)
+        assert(pixelStride == image.planes[1].pixelStride)
+        if (pixelStride == 2 && rowStride == width && uBuffer.get(0) === vBuffer.get(1)) {
+            // maybe V an U planes overlap as per NV21, which means vBuffer[1] is alias of uBuffer[0]
+            val savePixel: Byte = vBuffer.get(1)
+            try {
+                vBuffer.put(1, savePixel.inv() as Byte)
+                if (uBuffer.get(0) === savePixel.inv() as Byte) {
+                    vBuffer.put(1, savePixel)
+                    vBuffer.position(0)
+                    uBuffer.position(0)
+                    vBuffer.get(nv21, ySize, 1)
+                    uBuffer.get(nv21, ySize + 1, uBuffer.remaining())
+                    return nv21 // shortcut
+                }
+            } catch (ex: ReadOnlyBufferException) {
+                // unfortunately, we cannot check if vBuffer and uBuffer overlap
+            }
+
+            // unfortunately, the check failed. We must save U and V pixel by pixel
+            vBuffer.put(1, savePixel)
+        }
+
+        // other optimizations could check if (pixelStride == 1) or (pixelStride == 2),
+        // but performance gain would be less significant
+        for (row in 0 until height / 2) {
+            for (col in 0 until width / 2) {
+                val vuPos = col * pixelStride + row * rowStride
+                nv21[pos++] = vBuffer.get(vuPos)
+                nv21[pos++] = uBuffer.get(vuPos)
+            }
+        }
+        return nv21
+    }
+
     fun preview(previewConfig: AVMPreviewConfig) {
-//        previewConfig.surfaces.add(imageReader.surface)
+        previewConfig.surfaces.add(imageReader.surface)
         this.previewConfig = previewConfig
         if (ActivityCompat.checkSelfPermission(
                 context,
@@ -148,7 +181,7 @@ class CameraHandler(
                             previewConfig.surfaces.map {
                                 OutputConfiguration(it)
                             },
-                            previewConfig.executor,
+                            ExecutorsHelper.IO_THREAD_POOL,
                             object :
                                 CameraCaptureSession.StateCallback() {
                                 override fun onConfigured(session: CameraCaptureSession) {
@@ -156,7 +189,7 @@ class CameraHandler(
                                     val request =
                                         camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
                                     request.addTarget(previewConfig.surfaces[0])
-//                                    request.addTarget(previewConfig.surfaces[1])
+                                    request.addTarget(previewConfig.surfaces[1])
 
                                     val bui = request.build()
                                     session.setRepeatingRequest(bui, null, null)
@@ -191,7 +224,7 @@ class CameraHandler(
     fun capture(onSuccess: (filePath: String) -> Unit, onFail: (e: Exception) -> Unit) {
         captureSession?.let { sesstion ->
             var request: CaptureRequest =
-                sesstion.device?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).also {
+                sesstion.device?.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).also {
                     it.addTarget(imageReader.surface)
                 }.build()
 
@@ -232,6 +265,25 @@ class CameraHandler(
 
     fun getSolutionSizes(id: String): Array<Size>? {
         return vCameraRepository.getCaptureResolutionList(id)
+    }
+
+    fun release() {
+        if(captureSession?.device!=null) {
+            captureSession?.device?.close()
+            captureSession?.device == null
+        }
+
+        if(captureSession !=null) {
+            captureSession?.close()
+            captureSession == null
+        }
+
+        if(imageReader !=null) {
+            imageReader?.close()
+            imageReader == null
+        }
+
+        Log.d(TAG, "camera release() called")
     }
 
     companion object {

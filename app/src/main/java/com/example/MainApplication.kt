@@ -19,6 +19,14 @@ class MainApplication : Application(), CameraXConfig.Provider {
         return CameraXConfig.Builder.fromConfig(Camera2Config.defaultConfig()).build()
     }
 
+    private val repository:VCameraRepository by lazy {
+         VCameraRepository(Dispatchers.IO)
+    }
+
+    fun getRespository (): VCameraRepository{
+        return repository
+    }
+
     companion object {
         private const val TAG = "MainApplication"
     }

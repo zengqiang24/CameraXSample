@@ -3,12 +3,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:background="@color/cardview_dark_background"
     android:padding="20dp"
     android:layout_margin="20dp"
     android:layout_height="wrap_content">
 
-    <TextView
+    <Button
         android:id="@+id/tv_use_case_name"
         android:gravity="center"
         android:textColor="@color/white"
