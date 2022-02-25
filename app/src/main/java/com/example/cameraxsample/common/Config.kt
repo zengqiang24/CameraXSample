@@ -2,7 +2,7 @@ package com.example.cameraxsample.common
 
 //CAMERA Devices ID depends on specific head unit.
 enum class Camera(val ID: String) {
-    LEFT_CAMERA("8"), RIGHT_CAMERA("9"), FRONT_CAMERA("10"), BACK_CAMERA("11");
+    LEFT_CAMERA("8"), RIGHT_CAMERA("9"), FRONT_CAMERA("10"), BACK_CAMERA("11"), FULL_CAMERA("12");
 
     override fun toString(): String {
         return name
@@ -15,6 +15,7 @@ fun getCameraName(id: String): String {
         "9" -> Camera.RIGHT_CAMERA.toString()
         "10" -> Camera.FRONT_CAMERA.toString()
         "11" -> Camera.BACK_CAMERA.toString()
+        "12" -> Camera.FULL_CAMERA.toString()
         else -> "unknown"
     }
 }

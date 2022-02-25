@@ -2,9 +2,12 @@ package com.example.cameraxsample.camera2
 
 import android.util.Log
 import android.util.Size
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
-import com.example.cameraxsample.common.Camera
+import androidx.lifecycle.viewModelScope
 import com.example.cameraxsample.common.AVMPreviewConfig
+import com.example.cameraxsample.common.Camera
+import kotlinx.coroutines.launch
 
 /**
  * 职责：
@@ -41,6 +44,7 @@ class VCameraViewModel(private val cameraHandler: CameraHandler) : ViewModel() {
      * 拍照
      */
     fun capture() {
+        Log.d(TAG, "qiang capture() called")
         cameraHandler.capture(
             onSuccess = {
                 Log.d(TAG, "capture() called with: filePath = $it")
@@ -50,6 +54,7 @@ class VCameraViewModel(private val cameraHandler: CameraHandler) : ViewModel() {
             })
     }
 
+    val isDeletingImages  = MutableLiveData<Boolean>()
 
     /**
      * 预览相机
@@ -68,6 +73,14 @@ class VCameraViewModel(private val cameraHandler: CameraHandler) : ViewModel() {
 
     fun releaseCameras(){
         cameraHandler.release()
+    }
+
+    fun deleteAllImages(){
+        viewModelScope.launch {
+            isDeletingImages.value = true
+            cameraHandler.deleteImages()
+            isDeletingImages.value = false
+        }
     }
     companion object {
         private const val TAG = "VCameraViewModel"

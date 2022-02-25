@@ -4,12 +4,16 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.*
 import androidx.annotation.RequiresApi
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Observer
 import com.example.MainApplication
 import com.example.cameraxsample.common.AVMPreviewConfig
 import com.example.cameraxsample.databinding.CameraLayoutFragmentBinding
+
+private const val TAG = "PreviewFragment"
 
 class PreviewFragment(private val cameraId: String) : Fragment() {
     private lateinit var binding: CameraLayoutFragmentBinding
@@ -21,7 +25,7 @@ class PreviewFragment(private val cameraId: String) : Fragment() {
     }
 
     companion object {
-        fun newInstance(cameraId: String): Fragment {
+        fun newInstance(cameraId: String): PreviewFragment {
             return PreviewFragment(cameraId)
         }
     }
@@ -51,6 +55,10 @@ class PreviewFragment(private val cameraId: String) : Fragment() {
     override fun onPause() {
         super.onPause()
         viewModel?.onPause()
+    }
+
+    fun capture() {
+        viewModel?.capture()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -84,6 +92,12 @@ class PreviewFragment(private val cameraId: String) : Fragment() {
             }
 
         })
+
+
+        val observer = Observer<Boolean> {
+            Log.d(TAG, "isDeletingImages() called isDelete Image= $it")
+        }
+        viewModel?.isDeletingImages?.observe(viewLifecycleOwner, observer)
     }
 
     override fun onDestroyView() {

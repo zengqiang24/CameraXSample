@@ -11,21 +11,18 @@ import android.media.Image
 import android.media.ImageReader
 import android.os.Build
 import android.os.Handler
-import android.os.HandlerThread
 import android.util.Log
 import android.util.Size
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import com.example.cameraxsample.common.AVMPreviewConfig
 import com.example.cameraxsample.common.ExecutorsHelper
-import com.example.cameraxsample.common.getCameraName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
-import java.nio.ReadOnlyBufferException
+import java.util.HashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.experimental.inv
 
 
 class CameraHandler(
@@ -33,131 +30,155 @@ class CameraHandler(
     private val cameraId: String,
     private val vCameraRepository: VCameraRepository
 ) {
-    private val state: AtomicBoolean = AtomicBoolean(false)
+    private val isRecording: AtomicBoolean = AtomicBoolean(true)
     private var captureSession: CameraCaptureSession? = null
     private var previewConfig: AVMPreviewConfig? = null
-    private var imageReader: ImageReader =
-        ImageReader.newInstance(1920, 1080, ImageFormat.YUV_420_888, 1)
-    private var backgroundThread: BackgroundThread? = null
-    private var backgroundHandler: Handler? = null
+
     private val coroutineScope = CoroutineScope(Dispatchers.IO)
-    private var cameraSystemManager = context.getSystemService(AppCompatActivity.CAMERA_SERVICE) as CameraManager
-    private var cameraDevice:CameraDevice? = null
+    private var cameraSystemManager =
+        context.getSystemService(AppCompatActivity.CAMERA_SERVICE) as CameraManager
+    private var cameraDevice: CameraDevice? = null
+    val imageReader: ImageReader by lazy {
+        newImageReader()
+    }
+
+    private var imageDataThread: CameraStateManager.BackgroundThread? = null
+    private var imageDataHandler: Handler? = null
+    private var backgroundThread: CameraStateManager.BackgroundThread? = null
+    private var backgroundHandler: Handler? = null
+    private fun newImageReader(): ImageReader {
+        return ImageReader.newInstance(1920, 1080, ImageFormat.YUV_420_888, 1)
+    }
+
     init {
-        backgroundThread = BackgroundThread("capture-thread $cameraId")
-        backgroundThread?.let {
+        imageDataThread = CameraStateManager.BackgroundThread("preview-thread$cameraId")
+        imageDataThread?.let {
             it.start()
-            backgroundHandler = Handler(it.looper)
+            imageDataHandler = Handler(it.looper)
         }
-    }
 
-    fun onResume() {
-        if (backgroundThread == null) {
-            Log.d(TAG, "imageReader background thread start() called")
-            backgroundThread?.let {
-                it.start()
-                backgroundHandler = Handler(it.looper)
-            }
-        }
-    }
-
-    fun onPause() {
-        Log.d(TAG, "imageReader background thread quitSafely() called")
-        backgroundThread?.quitSafely()
-        backgroundThread = null
-        backgroundHandler = null
-    }
-
-    init {
         imageReader.setOnImageAvailableListener(
             {
-                Log.d(TAG, "in imageReader, thread name = ${Thread.currentThread().name}")
-                saveFrame(it.acquireNextImage())
-            }, backgroundHandler
+                Log.d(TAG, "imageReader= $cameraId")
+                if (isRecording.get()) {
+                    Log.d(
+                        TAG,
+                        " imageReader id = $cameraId in imageReader, "
+                    )
+                    val image = it.acquireNextImage()
+                    var bitmap = encodeFrame(image)
+                     bitmap?.let {
+                         addToCache(cameraId, bitmap)
+                         CameraStateManager.lockCountDown()
+                         image.close()
+                     }
+                } else {
+                    it.close()
+                }
+            }, imageDataHandler
         )
     }
 
     /**
      * save  frame will block cpu
      */
-    private fun saveFrame(image: Image) {
-        val savingPhoto = vCameraRepository.isSavingPhoto
-        if(savingPhoto) {
-            image.close()
-            Log.d(TAG, "正在保存图片，跳过此帧...")
-            return
-        }
+    private fun encodeFrame(image: Image): Bitmap? {
         val timestamp: Long = image.timestamp
-        val yuv420888tonv21 = YUV_420_888toNV21(image)
-        val bitmap = BitmapFactory.decodeByteArray(yuv420888tonv21, 0, yuv420888tonv21!!.size)
-        if(bitmap == null) {
+        Log.d(
+            TAG,
+            "[qiang111111111111111111111] called with: cameraId = $cameraId timestamp= $timestamp thread name = ${Thread.currentThread().name}"
+        )
+
+        val rez: ByteArray
+
+        val out = ByteArrayOutputStream()
+        val byteBuf: ByteBuffer = imageToByteBuffer(image)
+        rez = byteBuf.array()
+
+        val rect = image.cropRect
+        val yuvImage = YuvImage(rez, ImageFormat.NV21, rect.width(), rect.height(), null)
+
+        try {
+            yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 90, out)
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
+
+        val imageBytes = out.toByteArray()
+        // Display for the end user
+        val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+        if (bitmap == null) {
             Log.d(TAG, "saveFrame() called with: bitmap = $bitmap")
             image.close()
-            return
         }
-        vCameraRepository.saveFrame(context, getCameraName(cameraId), bitmap)
-        image.close()
+        return bitmap
     }
 
-    private fun YUV_420_888toNV21(image: Image): ByteArray? {
-        val width = image.width
-        val height = image.height
-        val ySize = width * height
-        val uvSize = width * height / 4
-        val nv21 = ByteArray(ySize + uvSize * 2)
-        val yBuffer: ByteBuffer = image.planes[0].buffer // Y
-        val uBuffer: ByteBuffer = image.planes[1].buffer // U
-        val vBuffer: ByteBuffer = image.planes[2].buffer // V
-        var rowStride = image.planes[0].rowStride
-        assert(image.planes[0].pixelStride == 1)
-        var pos = 0
-        if (rowStride == width) { // likely
-            yBuffer.get(nv21, 0, ySize)
-            pos += ySize
+    private fun addToCache(cameraId: String, bitmap: Bitmap) {
+        Log.d(TAG, "addBitmap() called with: cameraId = $cameraId, bitmap = $bitmap")
+        val sequenceId = CameraStateManager.getCurrentSequenceId()
+        Log.d(TAG, "sequenceId = $sequenceId")
+        var frame = CameraStateManager.frameQueue[sequenceId]
+        var data: HashMap<String, Bitmap>?
+        if (frame == null) {
+            data = hashMapOf()
+            frame = Frame(sequenceId, data)
+            CameraStateManager.frameQueue[sequenceId] = frame
+            CameraStateManager.sequenceIdToList.offer(sequenceId)
         } else {
-            var yBufferPos = -rowStride.toLong() // not an actual position
-            while (pos < ySize) {
-                yBufferPos += rowStride.toLong()
-                yBuffer.position(yBufferPos.toInt())
-                yBuffer.get(nv21, pos, width)
-                pos += width
-            }
+            data = frame.bitmaps
         }
-        rowStride = image.planes[2].rowStride
-        val pixelStride = image.planes[2].pixelStride
-        assert(rowStride == image.planes[1].rowStride)
-        assert(pixelStride == image.planes[1].pixelStride)
-        if (pixelStride == 2 && rowStride == width && uBuffer.get(0) === vBuffer.get(1)) {
-            // maybe V an U planes overlap as per NV21, which means vBuffer[1] is alias of uBuffer[0]
-            val savePixel: Byte = vBuffer.get(1)
-            try {
-                vBuffer.put(1, savePixel.inv() as Byte)
-                if (uBuffer.get(0) === savePixel.inv() as Byte) {
-                    vBuffer.put(1, savePixel)
-                    vBuffer.position(0)
-                    uBuffer.position(0)
-                    vBuffer.get(nv21, ySize, 1)
-                    uBuffer.get(nv21, ySize + 1, uBuffer.remaining())
-                    return nv21 // shortcut
+        data[cameraId] = bitmap
+    }
+
+    private fun imageToByteBuffer(image: Image): ByteBuffer {
+        val crop = image.cropRect
+        val width = crop.width()
+        val height = crop.height()
+        val planes = image.planes
+        val rowData = ByteArray(planes[0].rowStride)
+        val bufferSize = width * height * ImageFormat.getBitsPerPixel(ImageFormat.YUV_420_888) / 8
+        val output = ByteBuffer.allocateDirect(bufferSize)
+        var channelOffset = 0
+        var outputStride = 0
+        for (planeIndex in 0..2) {
+            if (planeIndex == 0) {
+                channelOffset = 0
+                outputStride = 1
+            } else if (planeIndex == 1) {
+                channelOffset = width * height + 1
+                outputStride = 2
+            } else if (planeIndex == 2) {
+                channelOffset = width * height
+                outputStride = 2
+            }
+            val buffer = planes[planeIndex].buffer
+            val rowStride = planes[planeIndex].rowStride
+            val pixelStride = planes[planeIndex].pixelStride
+            val shift = if (planeIndex == 0) 0 else 1
+            val widthShifted = width shr shift
+            val heightShifted = height shr shift
+            buffer.position(rowStride * (crop.top shr shift) + pixelStride * (crop.left shr shift))
+            for (row in 0 until heightShifted) {
+                val length: Int
+                if (pixelStride == 1 && outputStride == 1) {
+                    length = widthShifted
+                    buffer[output.array(), channelOffset, length]
+                    channelOffset += length
+                } else {
+                    length = (widthShifted - 1) * pixelStride + 1
+                    buffer[rowData, 0, length]
+                    for (col in 0 until widthShifted) {
+                        output.array()[channelOffset] = rowData[col * pixelStride]
+                        channelOffset += outputStride
+                    }
                 }
-            } catch (ex: ReadOnlyBufferException) {
-                // unfortunately, we cannot check if vBuffer and uBuffer overlap
-            }
-
-            // unfortunately, the check failed. We must save U and V pixel by pixel
-            vBuffer.put(1, savePixel)
-        }
-
-        // other optimizations could check if (pixelStride == 1) or (pixelStride == 2),
-        // but performance gain would be less significant
-        for (row in 0 until height / 2) {
-            for (col in 0 until width / 2) {
-                val vuPos = col * pixelStride + row * rowStride
-                nv21[pos++] = vBuffer.get(vuPos)
-                nv21[pos++] = uBuffer.get(vuPos)
+                if (row < heightShifted - 1) {
+                    buffer.position(buffer.position() + rowStride - length)
+                }
             }
         }
-        return nv21
+        return output
     }
 
     fun preview(previewConfig: AVMPreviewConfig) {
@@ -173,7 +194,7 @@ class CameraHandler(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             cameraSystemManager.openCamera(
                 cameraId,
-                ExecutorsHelper.IO_THREAD_POOL,
+                ExecutorsHelper.SINGLE_THREAD_POOL,
                 object : CameraDevice.StateCallback() {
                     override fun onOpened(camera: CameraDevice) {
                         val sessionConfiguration = SessionConfiguration(
@@ -181,18 +202,33 @@ class CameraHandler(
                             previewConfig.surfaces.map {
                                 OutputConfiguration(it)
                             },
-                            ExecutorsHelper.IO_THREAD_POOL,
+                            ExecutorsHelper.SINGLE_THREAD_POOL,
                             object :
                                 CameraCaptureSession.StateCallback() {
                                 override fun onConfigured(session: CameraCaptureSession) {
+                                    val cameraCharacteristics =
+                                        cameraSystemManager.getCameraCharacteristics(cameraId);
+                                    val streamConfigurationMap =
+                                        cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                                    var sizes =
+                                        streamConfigurationMap?.getOutputSizes(ImageFormat.YUV_420_888)
+                                    for (size in sizes!!) {
+                                        Log.d(
+                                            TAG,
+                                            "cameraid = $cameraId cameraCharacteristics  called with: size width= ${size.width} height = ${size.height}"
+                                        )
+                                    }
                                     captureSession = session
                                     val request =
                                         camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
                                     request.addTarget(previewConfig.surfaces[0])
-                                    request.addTarget(previewConfig.surfaces[1])
 
                                     val bui = request.build()
-                                    session.setRepeatingRequest(bui, null, null)
+                                    session.setRepeatingRequest(
+                                        bui,
+                                        null,
+                                        CameraStateManager.getBackgroundHandler()
+                                    )
                                     Log.d(TAG, "onConfigured() called with: session = $session")
                                 }
 
@@ -235,16 +271,11 @@ class CameraHandler(
                     result: TotalCaptureResult
                 ) {
                     super.onCaptureCompleted(session, request, result)
-                    //save to disk
                     Log.d(
                         TAG,
-                        "onCaptureCompleted() called with: session = $session, request = $request, result = $result"
+                        "onCaptureCompleted() called with: session = $session, request = $request, result = $result Thread = ${Thread.currentThread().name}"
                     )
-                    state.compareAndSet(false, true)
-                    coroutineScope.launch {
-                        vCameraRepository.saveImageData(result)
-                        onSuccess("file path .... ${Thread.currentThread().name}")
-                    }
+
                 }
 
                 override fun onCaptureFailed(
@@ -255,7 +286,7 @@ class CameraHandler(
                     super.onCaptureFailed(session, request, failure)
                     onFail(java.lang.Exception(failure.toString()))
                 }
-            }, null)
+            }, CameraStateManager.getBackgroundHandler())
         }
     }
 
@@ -268,17 +299,17 @@ class CameraHandler(
     }
 
     fun release() {
-        if(captureSession?.device!=null) {
+        if (captureSession?.device != null) {
             captureSession?.device?.close()
             captureSession?.device == null
         }
 
-        if(captureSession !=null) {
+        if (captureSession != null) {
             captureSession?.close()
             captureSession == null
         }
 
-        if(imageReader !=null) {
+        if (imageReader != null) {
             imageReader?.close()
             imageReader == null
         }
@@ -286,13 +317,55 @@ class CameraHandler(
         Log.d(TAG, "camera release() called")
     }
 
-    companion object {
-        private const val TAG = "VCameraManager"
+    fun stopRecord() {
+        isRecording.compareAndSet(true, false)
+        Log.d(TAG, "stopRecord() called isRecording = ${isRecording.get()}")
     }
 
-    class BackgroundThread(name: String) : HandlerThread(name) {
-        override fun run() {
-            super.run()
-        }
+    fun startRecord() {
+        isRecording.compareAndSet(false, true)
+        Log.d(TAG, "startRecord() called isRecording = ${isRecording.get()}")
     }
+
+    suspend fun deleteImages() {
+        vCameraRepository.deleteAllImages(context)
+    }
+
+    fun onResume() {
+        CameraStateManager.onResume()
+        if (imageDataThread == null) {
+            imageDataThread = CameraStateManager.BackgroundThread("preview-thread")
+            imageDataThread?.let {
+                it.start()
+                imageDataHandler = Handler(it.looper)
+            }
+
+        }
+
+//        if(backgroundThread == null) {
+//            backgroundThread =
+//                CameraStateManager.BackgroundThread("background-thread")
+//            backgroundThread?.let {
+//                it.start()
+//                backgroundHandler = Handler(it.looper)
+//            }
+//        }
+    }
+
+    fun onPause() {
+        imageDataThread?.quitSafely()
+        imageDataThread = null
+        imageDataHandler = null
+
+
+        backgroundThread?.quitSafely()
+        backgroundThread?.join()
+        backgroundThread = null
+        backgroundHandler = null
+    }
+
+    companion object {
+        private const val TAG = "qiang VCameraManager"
+    }
+
 }

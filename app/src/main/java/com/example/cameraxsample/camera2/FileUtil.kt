@@ -11,16 +11,18 @@ import java.util.*
 
 private const val TAG = "FileUtil"
 const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
-fun saveBitmap(context: Context, bitmap: Bitmap, fileName: String) {
+fun saveBitmap(context: Context, id: Int, bitmap: Bitmap, fileName: String) {
     Log.d(
         TAG,
         "saveBitmap() called with: context = $context, bitmap = $bitmap, fileName = $fileName"
     )
     val file = File(
         getOutputDirectory(context, fileName),
-        SimpleDateFormat(
-            CameraXActivity.FILENAME_FORMAT, Locale.US
-        ).format(System.currentTimeMillis()) + ".jpg"
+//         "$id -" + SimpleDateFormat(
+//            CameraXActivity.FILENAME_FORMAT, Locale.US
+//        ).format(System.currentTimeMillis()) + ".jpg"
+                 "$id.jpg"
+
     )
     // Create folder name
     val output = FileOutputStream(file)
@@ -38,8 +40,16 @@ fun saveBitmap(context: Context, bitmap: Bitmap, fileName: String) {
  */
 fun getOutputDirectory(context: Context, fileName: String): File {
     val mediaDir = context.externalMediaDirs.firstOrNull()?.let {
-        File(it, fileName).apply { mkdirs() }
+        File(it, "Image/" + fileName).apply { mkdirs() }
     }
     return if (mediaDir != null && mediaDir.exists())
         mediaDir else context.filesDir
 }
+
+fun getImageDirectory(context: Context): File? {
+    val mediaDir = context.externalMediaDirs.firstOrNull()?.let {
+        File(it, "Image")
+    }
+    return mediaDir
+}
+

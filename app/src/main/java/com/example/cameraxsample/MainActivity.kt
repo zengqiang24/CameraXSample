@@ -6,6 +6,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -55,7 +56,7 @@ class MainActivity : AppCompatActivity() {
 
         class EntranceRLViewHolder(itemView: View, onClick: OnItemClick) :
             RecyclerView.ViewHolder(itemView) {
-            val demoName: TextView = itemView.findViewById(R.id.tv_use_case_name)
+            val demoName: Button = itemView.findViewById(R.id.tv_use_case_name)
             var currentEntranceData: EntranceData? = null
 
             init { // when does init block code can be executed?  init block have a higher priority than constructor.
